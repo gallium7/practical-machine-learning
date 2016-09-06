@@ -1,0 +1,105 @@
+---
+title: "Practical Machine Learning Project"
+author: "Gary Schurr"
+date: "6 September 2016"
+output: html_document
+---
+
+## Summary
+
+This project predicts the manner in which weightlifting exercises are carried out by considering data recorded by personal activity data devices. It does this by fitting a model to experimental data which can then be used to predict technique ("classe"). As part of the assignment this is done on 20 different test cases. A random forest model was selected as the final model, applied after variables were removed based on lack of data and near zero variance.
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Loading data and exploratory analysis
+
+```{r}
+# load required libraries
+library(caret)
+library(rpart)
+library(randomForest)
+set.seed(2888)
+
+#the data is in the PML folder
+setwd("~/R/PML")
+
+#read data into variable pml
+pml <- read.csv("pml-training.csv")
+
+#have a look at the data
+dim(pml)
+head(pml)[1:20]
+names(pml)
+```
+
+We can see that some of the columns should not be included in the prediction model e.g participant, times etc. Also, some of the data seems to contain NAs; we will use a percentage threshold to remove these columns (variables) also.
+
+## Preprocessing
+
+```{r}
+#create training and testing sets with a 70:30 split
+inTrain <- createDataPartition(y=pml$classe, p=0.7, list=FALSE)
+training <- pml[inTrain,]
+testing <- pml[-inTrain,]
+dim(training)
+dim(testing)
+
+# looking at the column names we can exclude columns 1-5 since they are not relevant to the weightlifting movement
+training <- training[,-c(1:5)]
+testing <- testing[,-c(1:5)]
+
+# check for zero covariates and then remove them
+nsv <- nearZeroVar(training)
+
+training <- training[,-nsv]
+testing <- testing[,-nsv]
+dim(training)
+
+# there also a lot of NAs in the data set. It may be dangerous and erroneous to try and impute them, so instead lets remove those variables that have, say, more the 95% NAs
+nas <- sapply(training, function(x) mean(is.na(x))) > 0.95
+nas
+training <- training[,nas==FALSE]
+testing <- testing[,nas==FALSE]
+dim(training)
+```
+
+## Model Selection
+
+### CART model
+
+```{r}
+# start with an CART/rpart model
+mod1 <- train(classe~., data=training, method="rpart")
+mod1
+# have a look at the accuracy
+confusionMatrix(testing$classe, predict(mod1, testing))
+```
+
+This model gives a poor accuracy so lets try something a bit more elaborate.
+
+### Random Forest Model
+
+```{r}
+# start with a random forest model
+mod2 <- train(classe~., data=training, method="rf")
+mod2
+# have a look at the accuracy
+confusionMatrix(testing$classe, predict(mod2, testing))
+```
+
+This model gives a very high level of accuracy, which is acceptable.
+
+NB I would like to also try a Boosting model but I don't think my laptop will be able to build it. Generating the random forest model failed several times also.
+
+## Predict classe for test data set
+
+The Random Forest Model is now used to predict the technique (the classe) of the 20 rows in the test set.
+
+```{r}
+#predict classe for pml-testing
+pml_testing <- read.csv("pml-testing.csv")
+pred_test <- predict(mod2, newdata=pml_testing)
+pred_test
+```
